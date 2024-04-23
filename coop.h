@@ -24,9 +24,15 @@ struct coroutine {
 void coop(void (*func)(void*), void* args);
 void yield();
 
+struct coop_list {
+    coroutine* head;
+    coroutine* tail;
+};
+
 struct scheduler {
-    coroutine *current;
-    coroutine *tail;
+    coroutine* current;
+    coroutine* head;
+    coroutine* tail; // ciruclar linked list
     jmp_buf context;
 };
 

@@ -5,6 +5,14 @@
 struct scheduler* __scheduler;
 
 void __schedule() {
+    if (__scheduler->current) {
+        // append last running coroutine to the end of the list
+
+    }
+
+    // pick next coroutine to run
+    __scheduler->current = __scheduler->head;
+    __scheduler->head = __scheduler->head->next;
     struct coroutine* selected;
 
     if (!__scheduler->current) {
@@ -69,20 +77,21 @@ void coop(void (*func)(void*), void* args) {
     new_coroutine->args = args;
     new_coroutine->id = co_id++;
     new_coroutine->stack_bottom = malloc(STACK_SIZE);
-    new_coroutine->stack_top = (char*)new_coroutine->stack_bottom + STACK_SIZE; // TODO: is this correct?
+    new_coroutine->stack_top = (char*)new_coroutine->stack_bottom + STACK_SIZE;
     new_coroutine->status = CREATED;
 
-    if (!__scheduler || !__scheduler->current) {
+    if (!__scheduler || !__scheduler->head) {
         // initiate scheduler when invoking main coroutine
         __scheduler = (struct scheduler*)(sizeof(struct scheduler));
+        __scheduler->head = new_coroutine;
         __scheduler->tail = new_coroutine;
-        __scheduler->tail->next = new_coroutine;
-        __scheduler->current = new_coroutine;
+        // __scheduler->tail->next = new_coroutine;
+        // __scheduler->current = new_coroutine;
 
         // should block until all coroutines are done
         __scheduler_entry();
     } else {
-        new_coroutine->next = __scheduler->tail->next;
+       //new_coroutine->next = __scheduler->tail->next;
         __scheduler->tail->next = new_coroutine;
         __scheduler->tail = new_coroutine;
     }
@@ -91,7 +100,8 @@ void coop(void (*func)(void*), void* args) {
 void __curr_co_free() {
     free(__scheduler->current->stack_bottom);
     // TODO: unlink from coroutine list
-    
+    struct coroutine* prev;
+
     free(__scheduler->current);
     __scheduler->current = NULL;
 }
@@ -111,11 +121,40 @@ void yield() {
     // resume execution
 }
 
+struct coroutine* __list_pop(struct coop_list* l) {
+    struct coroutine* curr = l->head;
+    if (!curr) {
+        // list is empty
+        return NULL;
+    }
+    
+    if (l->head == l->tail) {
+        // list is empty after the pop
+        l->head = l->tail = NULL;
+    } else {
+        l->head = l->head->next;
+    }
+
+    curr->next = NULL;
+
+    return curr;
+}
+
+void __list_append(struct coop_list* l, struct coroutine* curr) {
+    if (!l->tail) {
+        // list is empty
+        l->head = l->tail = curr;
+    } else {
+        l->tail->next = curr;
+        l->tail = curr;
+    }
+}
+
 void co1(void* args) {
 
 }
 
 int main(int argc, char**argv) {
     // example usage
-    co_create(co1, NULL);
+    coop(co1, NULL);
 }
