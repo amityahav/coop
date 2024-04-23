@@ -45,12 +45,12 @@ void __schedule() {
 }
 
 // solely for allowing usage before declaration
-void __co_free();
+void __curr_co_free();
 
 void __scheduler_entry() {
     switch (setjmp(__scheduler->context)) {
     case EXIT:
-        __co_free();
+        __curr_co_free();
     case 0: 
     case SCHED:
         __schedule();
@@ -61,7 +61,7 @@ void __scheduler_entry() {
     }
 }
 
-void co_create(void (*func)(void*), void* args) {
+void coop(void (*func)(void*), void* args) {
     static int co_id;
 
     struct coroutine* new_coroutine = (struct coroutine*)malloc(sizeof(struct coroutine));
@@ -72,7 +72,7 @@ void co_create(void (*func)(void*), void* args) {
     new_coroutine->stack_top = (char*)new_coroutine->stack_bottom + STACK_SIZE; // TODO: is this correct?
     new_coroutine->status = CREATED;
 
-    if (!__scheduler) {
+    if (!__scheduler || !__scheduler->current) {
         // initiate scheduler when invoking main coroutine
         __scheduler = (struct scheduler*)(sizeof(struct scheduler));
         __scheduler->tail = new_coroutine;
@@ -88,7 +88,7 @@ void co_create(void (*func)(void*), void* args) {
     }
 }
 
-void __co_free() {
+void __curr_co_free() {
     free(__scheduler->current->stack_bottom);
     // TODO: unlink from coroutine list
     

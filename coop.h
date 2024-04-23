@@ -21,7 +21,7 @@ struct coroutine {
     coroutine* next;
 };
 
-void co_create(void (*func)(void*), void* args);
+void coop(void (*func)(void*), void* args);
 void yield();
 
 struct scheduler {
