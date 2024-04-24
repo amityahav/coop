@@ -99,14 +99,14 @@ void coop(void (*func)(void*), void* args) {
         __scheduler = (struct scheduler*)malloc(sizeof(struct scheduler));
     }
 
-    if (!__scheduler->head) {
-        __list_append(&__scheduler->list, new_coroutine);
+    char is_main = !__scheduler->list.head;
 
+    __list_append(&__scheduler->list, new_coroutine);
+    
+    if (is_main) {
         // should block until all coroutines are done
         __scheduler_entry();
-    } else {
-        __list_append(&__scheduler->list, new_coroutine);
-    }
+    } 
 }
 
 void __curr_co_free() {

@@ -32,8 +32,6 @@ struct coop_list {
 struct scheduler {
     coroutine* current;
     struct coop_list list;
-    coroutine* head;
-    coroutine* tail; // ciruclar linked list
     jmp_buf context;
 };
 
