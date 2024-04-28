@@ -51,8 +51,17 @@ void __schedule() {
     __scheduler->current = selected;
 
     if (__scheduler->current->status == CREATED) {
-        // TODO: point rsp to the stack
+        // modifying the stack pointer to point
+        // to the to-be-run coroutine's stack
+        // ARM specific for now
+        asm volatile(
+            "mov sp, %0"
+            :
+            : "r" (selected->stack_top)
+            :
+        );
 
+        //printf("running new..\n");
         __scheduler->current->status = RUNNING;
         __scheduler->current->func(__scheduler->current->args);
         // coroutine finished its execution, 
@@ -61,6 +70,7 @@ void __schedule() {
     } else if (__scheduler->current->status == RUNNABLE) {
         // coroutine was already running before,
         // resume execution
+        printf("resume..\n");
         __scheduler->current->status = RUNNING;
         longjmp(selected->context, 1);
     }
@@ -110,6 +120,8 @@ void coop(void (*func)(void*), void* args) {
 }
 
 void __curr_co_free() {
+    printf("%p\n", __scheduler->current->stack_bottom);
+    printf("%p\n", __scheduler->current->stack_top);
     free(__scheduler->current->stack_bottom);
     free(__scheduler->current);
     __scheduler->current = NULL;
@@ -130,11 +142,26 @@ void yield() {
     // resume execution
 }
 
-void co1(void* args) {
+void coop2(void *args) {
+    for (int i = 0; i < 5; i++) {
+        printf("hi from coop2 %d\n", i);
+        yield();
+    }
+}
 
+void coop1(void* args) {
+    //coop(coop2, NULL);
+    //yield();
+    for (int i = 0; i < 4; i++) {
+        //printf("%p\n", __scheduler->current->stack_bottom);
+        // printf("%p\n", __scheduler->current->stack_top);
+        // printf("hi from coop1 %d\n", i);
+        yield();
+    }
 }
 
 int main(int argc, char**argv) {
     // example usage
-    coop(co1, NULL);
+    coop(coop1, NULL);
+    printf("DONE\n");
 }

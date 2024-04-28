@@ -18,19 +18,19 @@ struct coroutine {
     void* args;
     void* stack_top;
     void* stack_bottom;
-    coroutine* next;
+    struct coroutine* next;
 };
 
 void coop(void (*func)(void*), void* args);
 void yield();
 
 struct coop_list {
-    coroutine* head;
-    coroutine* tail;
+    struct coroutine* head;
+    struct coroutine* tail;
 };
 
 struct scheduler {
-    coroutine* current;
+    struct coroutine* current;
     struct coop_list list;
     jmp_buf context;
 };
