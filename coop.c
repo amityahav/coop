@@ -56,12 +56,11 @@ void __schedule() {
         // ARM specific for now
         asm volatile(
             "mov sp, %0"
-            :
+            : 
             : "r" (selected->stack_top)
             :
         );
 
-        //printf("running new..\n");
         __scheduler->current->status = RUNNING;
         __scheduler->current->func(__scheduler->current->args);
         // coroutine finished its execution, 
@@ -70,7 +69,6 @@ void __schedule() {
     } else if (__scheduler->current->status == RUNNABLE) {
         // coroutine was already running before,
         // resume execution
-        printf("resume..\n");
         __scheduler->current->status = RUNNING;
         longjmp(selected->context, 1);
     }
@@ -83,7 +81,7 @@ void __scheduler_entry() {
     switch (setjmp(__scheduler->context)) {
     case EXIT:
         __curr_co_free();
-    case 0: 
+    case INIT: 
     case SCHED:
         __schedule();
         break;
@@ -101,7 +99,7 @@ void coop(void (*func)(void*), void* args) {
     new_coroutine->args = args;
     new_coroutine->id = co_id++;
     new_coroutine->stack_bottom = malloc(STACK_SIZE);
-    new_coroutine->stack_top = (char*)new_coroutine->stack_bottom + STACK_SIZE;
+    new_coroutine->stack_top = new_coroutine->stack_bottom + STACK_SIZE;
     new_coroutine->status = CREATED;
 
     if (!__scheduler) {
@@ -109,19 +107,17 @@ void coop(void (*func)(void*), void* args) {
         __scheduler = (struct scheduler*)malloc(sizeof(struct scheduler));
     }
 
-    char is_main = !__scheduler->list.head;
+    char is_main = !__scheduler->list.head && !__scheduler->current;
 
     __list_append(&__scheduler->list, new_coroutine);
     
     if (is_main) {
-        // should block until all coroutines are done
+        // should block until all coroutines including the parent coroutine are done
         __scheduler_entry();
     } 
 }
 
 void __curr_co_free() {
-    printf("%p\n", __scheduler->current->stack_bottom);
-    printf("%p\n", __scheduler->current->stack_top);
     free(__scheduler->current->stack_bottom);
     free(__scheduler->current);
     __scheduler->current = NULL;
@@ -142,7 +138,17 @@ void yield() {
     // resume execution
 }
 
+void coop3(void *args) {
+    int arr[100 * 1024];
+    for (int i = 0; i < 6; i++) {
+        printf("hi from coop3 %d\n", i);
+        yield();
+    }
+}
+
 void coop2(void *args) {
+    int arr[100 * 1024];
+    coop(coop3, NULL);
     for (int i = 0; i < 5; i++) {
         printf("hi from coop2 %d\n", i);
         yield();
@@ -150,18 +156,17 @@ void coop2(void *args) {
 }
 
 void coop1(void* args) {
-    //coop(coop2, NULL);
-    //yield();
+    int arr[100 * 1024];
+    coop(coop2, NULL);
     for (int i = 0; i < 4; i++) {
-        //printf("%p\n", __scheduler->current->stack_bottom);
-        // printf("%p\n", __scheduler->current->stack_top);
-        // printf("hi from coop1 %d\n", i);
+        printf("hi from coop1 %d \n", i);
         yield();
     }
 }
 
 int main(int argc, char**argv) {
     // example usage
+    yield();
     coop(coop1, NULL);
-    printf("DONE\n");
+    coop(coop3, NULL);
 }

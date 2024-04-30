@@ -1,6 +1,7 @@
 #include <setjmp.h>
 
-#define STACK_SIZE 2 * 1024
+#define STACK_SIZE 1024 * 1024 // 1 MB
+#define INIT 0
 #define EXIT 1
 #define SCHED 2
 
