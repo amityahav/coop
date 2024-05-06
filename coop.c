@@ -33,6 +33,12 @@ void __list_append(struct coop_list* l, struct coroutine* curr) {
     }
 }
 
+void __exit_current_coop() {
+    // wrapping this call inside a function solves 
+    // a weird segfault that i couldnt figure its cause
+	longjmp(__scheduler->context, EXIT);
+}
+
 void __schedule() {
     if (__scheduler->current) {
         __scheduler->current->status = RUNNABLE;
@@ -56,8 +62,8 @@ void __schedule() {
         // ARM specific for now
         asm volatile(
             "mov sp, %0"
+            : "+r" (selected->stack_top)
             : 
-            : "r" (selected->stack_top)
             :
         );
 
@@ -65,7 +71,7 @@ void __schedule() {
         __scheduler->current->func(__scheduler->current->args);
         // coroutine finished its execution, 
         // its resources can be safely freed
-        longjmp(__scheduler->context, EXIT);
+        __exit_current_coop();
     } else if (__scheduler->current->status == RUNNABLE) {
         // coroutine was already running before,
         // resume execution
@@ -74,8 +80,11 @@ void __schedule() {
     }
 }
 
-// solely for allowing usage before declaration
-void __curr_co_free();
+void __curr_co_free() {
+    free(__scheduler->current->stack_bottom);
+    free(__scheduler->current);
+    __scheduler->current = NULL;
+}
 
 void __scheduler_entry() {
     switch (setjmp(__scheduler->context)) {
@@ -117,12 +126,6 @@ void coop(void (*func)(void*), void* args) {
     } 
 }
 
-void __curr_co_free() {
-    free(__scheduler->current->stack_bottom);
-    free(__scheduler->current);
-    __scheduler->current = NULL;
-}
-
 void yield() {
     if (!__scheduler || !__scheduler->current) {
         printf("unexpected yield\n");
@@ -139,7 +142,6 @@ void yield() {
 }
 
 void coop3(void *args) {
-    int arr[100 * 1024];
     for (int i = 0; i < 6; i++) {
         printf("hi from coop3 %d\n", i);
         yield();
@@ -147,7 +149,6 @@ void coop3(void *args) {
 }
 
 void coop2(void *args) {
-    int arr[100 * 1024];
     coop(coop3, NULL);
     for (int i = 0; i < 5; i++) {
         printf("hi from coop2 %d\n", i);
@@ -156,7 +157,6 @@ void coop2(void *args) {
 }
 
 void coop1(void* args) {
-    int arr[100 * 1024];
     coop(coop2, NULL);
     for (int i = 0; i < 4; i++) {
         printf("hi from coop1 %d \n", i);
@@ -168,5 +168,5 @@ int main(int argc, char**argv) {
     // example usage
     yield();
     coop(coop1, NULL);
-    coop(coop3, NULL);
+    //coop(coop3, NULL);
 }
