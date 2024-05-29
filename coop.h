@@ -1,4 +1,6 @@
 #include <setjmp.h>
+#include "sys/types.h"
+#include "list.h"
 
 #define STACK_SIZE 2 * 1024
 #define INIT 0
@@ -9,6 +11,7 @@ enum status {
     CREATED,
     RUNNABLE,
     RUNNING,
+    WAITING_IO,
 };
 
 struct coroutine {
@@ -19,20 +22,39 @@ struct coroutine {
     void* args;
     void* stack_top;
     void* stack_bottom;
-    struct coroutine* next;
+    void* io_response;
 };
 
 void coop(void (*func)(void*), void* args);
+ssize_t coop_read(int fd, void *buf, size_t count);
 void yield();
 
-struct coop_list {
-    struct coroutine* head;
-    struct coroutine* tail;
-};
-
 struct scheduler {
-    struct coroutine* current;
-    struct coop_list list;
     jmp_buf context;
+    struct coroutine* current;
+    struct list coop_list;
+
+    pthread_t worker_thread;
+    struct list io_queue;
 };
 
+enum io_type {
+    IO_READ,
+    IO_WRITE,
+};
+
+struct io_read_request {
+    int fd;
+    void *buf;
+    size_t count;
+};
+
+struct io_read_response {
+    ssize_t n;
+};
+
+struct io_request {
+    struct coroutine* coop;
+    io_type type;
+    void *args;
+};

@@ -1,36 +1,17 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <unistd.h>
 #include "coop.h"
 
 struct scheduler* __scheduler;
 
-struct coroutine* __list_pop(struct coop_list* l) {
-    struct coroutine* curr = l->head;
-    if (!curr) {
-        // list is empty
-        return NULL;
-    }
+void* __worker_loop(void* arg);
 
-    if (l->head == l->tail) {
-        // list is empty after the pop
-        l->head = l->tail = NULL;
-    } else {
-        l->head = l->head->next;
-    }
-
-    curr->next = NULL;
-
-    return curr;
-}
-
-void __list_append(struct coop_list* l, struct coroutine* curr) {
-    if (!l->tail) {
-        // list is empty
-        l->head = l->tail = curr;
-    } else {
-        l->tail->next = curr;
-        l->tail = curr;
-    }
+void __init_scheduler() {
+    __scheduler = (struct scheduler*)malloc(sizeof(struct scheduler));
+    pthread_mutex_init(&__scheduler->coop_list.mu, NULL);
+    pthread_mutex_init(&__scheduler->io_queue.mu, NULL);
+    pthread_create(&__scheduler->worker_thread, NULL, __worker_loop, NULL);
 }
 
 void __exit_current_coop() {
@@ -41,14 +22,19 @@ void __exit_current_coop() {
 
 void __schedule() {
     if (__scheduler->current) {
-        __scheduler->current->status = RUNNABLE;
-        // append last yielded running coroutine to the end of the list
-        __list_append(&__scheduler->list, __scheduler->current);
+        if (__scheduler->current->status != WAITING_IO) {
+            // don't append the yielded coroutine in case it is 
+            // waiting for an IO to complete. the IO worker is responsible 
+            // to append it when completed.
+            __scheduler->current->status = RUNNABLE;
+            __list_append(&__scheduler->coop_list, __scheduler->current);
+        }
+
         __scheduler->current = NULL;
     }
 
     // pick next coroutine to run
-    struct coroutine* selected = __list_pop(&__scheduler->list);
+    struct coroutine* selected = (struct coroutine*)__list_pop(&__scheduler->coop_list);
     if (!selected) {
         // all coroutines are done
         return;
@@ -113,12 +99,12 @@ void coop(void (*func)(void*), void* args) {
 
     if (!__scheduler) {
         // initiate scheduler when invoking main coroutine
-        __scheduler = (struct scheduler*)malloc(sizeof(struct scheduler));
+        __init_scheduler();
     }
 
-    char is_main = !__scheduler->list.head && !__scheduler->current;
+    char is_main = !__scheduler->coop_list.head && !__scheduler->current;
 
-    __list_append(&__scheduler->list, new_coroutine);
+    __list_append(&__scheduler->coop_list, new_coroutine);
     
     if (is_main) {
         // should block until all coroutines including the parent coroutine are done
@@ -139,6 +125,71 @@ void yield() {
     }
 
     // resume execution
+}
+
+void __submit_io(io_type type, void* args) {
+    struct io_request* req = (struct io_request*)malloc(sizeof(struct io_request));
+    req->type = type;
+    req->coop = __scheduler->current;
+    req->args = args;
+
+    __scheduler->current->status = WAITING_IO;
+    __list_append(&__scheduler->io_queue, req);
+    yield();
+
+    free(req);
+}
+
+void* __io_read_handler(struct io_read_request* req) {
+    ssize_t n = read(req->fd, req->buf, req->count);
+    struct io_read_response* res = (struct io_read_response*)malloc(sizeof(struct io_read_response));
+    res->n = n;
+
+    return res;
+}
+
+void* __worker_loop(void* arg) {
+    for (;;) {
+        // should be optimized obviously
+        struct io_request* req = (struct io_request*)__list_pop(&__scheduler->io_queue);
+        if (!req) {
+            continue;
+        }
+
+        void* res;
+
+        switch (req->type) {
+            case IO_READ:
+                res = __io_read_handler((struct io_read_request*)req->args);
+                break;
+            default:
+                break;
+        }
+
+        req->coop->io_response = res;
+        req->coop->status = RUNNABLE;
+        __list_append(&__scheduler->coop_list, req->coop);
+    }
+}
+
+ssize_t coop_read(int fd, void *buf, size_t count) {
+    struct io_read_request* req = (struct io_read_request*)malloc(sizeof(struct io_read_request));
+    
+    req->fd = fd;
+    req->buf = buf;
+    req->count = count;
+
+    __submit_io(IO_READ, req);
+
+    // IO completed
+    struct io_read_response *res = (struct io_read_response*)__scheduler->current->io_response;
+    ssize_t n = res->n;
+
+    free(req);
+    free(res);
+    __scheduler->current->io_response = NULL;
+
+    return n;
 }
 
 void coop3(void *args) {
