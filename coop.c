@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <string.h>
 #include "coop.h"
 
 struct scheduler* __scheduler;
@@ -20,6 +21,13 @@ void __exit_current_coop() {
 	longjmp(__scheduler->context, EXIT);
 }
 
+struct coroutine* __pick_next_coop() {
+    // TODO: should check if the io queue is not empty/ worker is processing IO
+    // before deciding that there are no more coops to run solely based on the coop list
+    // it should be done carefully 
+    return NULL;
+}
+
 void __schedule() {
     if (__scheduler->current) {
         if (__scheduler->current->status != WAITING_IO) {
@@ -34,7 +42,8 @@ void __schedule() {
     }
 
     // pick next coroutine to run
-    struct coroutine* selected = (struct coroutine*)__list_pop(&__scheduler->coop_list);
+    // should block if theres IO being queued/ processed and coop list is empty
+    struct coroutine* selected = __pick_next_coop();
     if (!selected) {
         // all coroutines are done
         return;
@@ -127,25 +136,20 @@ void yield() {
     // resume execution
 }
 
-void __submit_io(io_type type, void* args) {
-    struct io_request* req = (struct io_request*)malloc(sizeof(struct io_request));
-    req->type = type;
-    req->coop = __scheduler->current;
-    req->args = args;
-
-    __scheduler->current->status = WAITING_IO;
-    __list_append(&__scheduler->io_queue, req);
-    yield();
-
-    free(req);
-}
-
-void* __io_read_handler(struct io_read_request* req) {
+void* __io_read_handler(struct io_rw_request* req) {
     ssize_t n = read(req->fd, req->buf, req->count);
-    struct io_read_response* res = (struct io_read_response*)malloc(sizeof(struct io_read_response));
+    struct io_rw_response* res = (struct io_rw_response*)malloc(sizeof(struct io_rw_response));
     res->n = n;
 
     return res;
+}
+
+void* __io_write_handler(struct io_rw_request* req) {
+    ssize_t n = write(req->fd, req->buf, req->count);
+    struct io_rw_response* res = (struct io_rw_response*)malloc(sizeof(struct io_rw_response));
+    res->n = n;
+
+    return res;   
 }
 
 void* __worker_loop(void* arg) {
@@ -160,9 +164,12 @@ void* __worker_loop(void* arg) {
 
         switch (req->type) {
             case IO_READ:
-                res = __io_read_handler((struct io_read_request*)req->args);
+                res = __io_read_handler((struct io_rw_request*)req->args);
                 break;
+            case IO_WRITE:
+                res = __io_write_handler((struct io_rw_request*)req->args);
             default:
+                printf("invalid IO type");
                 break;
         }
 
@@ -172,24 +179,49 @@ void* __worker_loop(void* arg) {
     }
 }
 
-ssize_t coop_read(int fd, void *buf, size_t count) {
-    struct io_read_request* req = (struct io_read_request*)malloc(sizeof(struct io_read_request));
+void __submit_io(enum io_type type, void* args) {
+    struct io_request* req = (struct io_request*)malloc(sizeof(struct io_request));
+    req->type = type;
+    req->coop = __scheduler->current;
+    req->args = args;
+
+    __scheduler->current->status = WAITING_IO;
+    __list_append(&__scheduler->io_queue, req);
+    yield();
+
+    free(req);
+}
+
+ssize_t __coop_rw(enum io_type type, int fd, void *buf, size_t count) {
+    struct io_rw_request* req = (struct io_rw_request*)malloc(sizeof(struct io_rw_request));
     
     req->fd = fd;
     req->buf = buf;
     req->count = count;
 
-    __submit_io(IO_READ, req);
+    __submit_io(type, req);
 
     // IO completed
-    struct io_read_response *res = (struct io_read_response*)__scheduler->current->io_response;
+    struct io_rw_response *res = (struct io_rw_response*)__scheduler->current->io_response;
     ssize_t n = res->n;
 
     free(req);
     free(res);
     __scheduler->current->io_response = NULL;
 
-    return n;
+    return n;    
+}
+
+ssize_t coop_read(int fd, void *buf, size_t count) {
+    return __coop_rw(IO_READ, fd, buf, count);
+}
+
+ssize_t coop_write(int fd, void *buf, size_t count) {
+    return __coop_rw(IO_WRITE, fd, buf, count);
+}
+
+void coop_print(const char* str) {
+    coop_write(STDOUT_FILENO, (void*)str, strlen(str));
 }
 
 void coop3(void *args) {

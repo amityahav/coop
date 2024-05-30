@@ -7,8 +7,8 @@ struct node {
 
 struct list {
     pthread_mutex_t mu;
-    node* head;
-    node* tail;
+    struct node* head;
+    struct node* tail;
 };
 
 void __list_append(struct list* l, void* data);

@@ -27,6 +27,8 @@ struct coroutine {
 
 void coop(void (*func)(void*), void* args);
 ssize_t coop_read(int fd, void *buf, size_t count);
+ssize_t coop_write(int fd, void *buf, size_t count);
+void coop_print(const char* str);
 void yield();
 
 struct scheduler {
@@ -43,18 +45,18 @@ enum io_type {
     IO_WRITE,
 };
 
-struct io_read_request {
+struct io_rw_request {
     int fd;
     void *buf;
     size_t count;
 };
 
-struct io_read_response {
+struct io_rw_response {
     ssize_t n;
 };
 
 struct io_request {
     struct coroutine* coop;
-    io_type type;
+    enum io_type type;
     void *args;
 };
