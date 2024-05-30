@@ -168,6 +168,7 @@ void* __worker_loop(void* arg) {
                 break;
             case IO_WRITE:
                 res = __io_write_handler((struct io_rw_request*)req->args);
+                break;
             default:
                 printf("invalid IO type");
                 break;
