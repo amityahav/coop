@@ -3,8 +3,6 @@
 #include "list.h"
 
 void* __list_pop(struct list* l) {
-    pthread_mutex_lock(&l->mu);
-
     struct node* curr = l->head;
     if (!curr) {
         // list is empty
@@ -22,16 +20,12 @@ void* __list_pop(struct list* l) {
     void* data = curr->data;
     free(curr);
 
-    pthread_mutex_unlock(&l->mu);
-
     return data;
 }
 
 void __list_append(struct list* l, void* data) {
     struct node* new_node = (struct node*)malloc(sizeof(struct node));
     new_node->data = data;
-
-    pthread_mutex_lock(&l->mu);
 
     if (!l->tail) {
         // list is empty
@@ -40,6 +34,4 @@ void __list_append(struct list* l, void* data) {
         l->tail->next = new_node;
         l->tail = new_node;
     }
-
-    pthread_mutex_unlock(&l->mu);
 }

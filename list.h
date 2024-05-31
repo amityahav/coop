@@ -6,7 +6,6 @@ struct node {
 };
 
 struct list {
-    pthread_mutex_t mu;
     struct node* head;
     struct node* tail;
 };

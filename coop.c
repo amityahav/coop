@@ -10,8 +10,8 @@ void* __worker_loop(void* arg);
 
 void __init_scheduler() {
     __scheduler = (struct scheduler*)malloc(sizeof(struct scheduler));
-    pthread_mutex_init(&__scheduler->coop_list.mu, NULL);
-    pthread_mutex_init(&__scheduler->io_queue.mu, NULL);
+    //pthread_mutex_init(&__scheduler->coop_list.mu, NULL);
+    //pthread_mutex_init(&__scheduler->io_queue.mu, NULL);
     pthread_create(&__scheduler->worker_thread, NULL, __worker_loop, NULL);
 }
 
@@ -22,27 +22,30 @@ void __exit_current_coop() {
 }
 
 struct coroutine* __pick_next_coop() {
-    // TODO: should check if the io queue is not empty/ worker is processing IO
-    // before deciding that there are no more coops to run solely based on the coop list
-    // it should be done carefully 
-    return NULL;
+    for (;;) {
+        struct coroutine* next = (struct coroutine*)__list_pop(&__scheduler->coop_list);
+        if (!next) {
+            return NULL;
+        }
+
+        if (next->status == RUNNABLE || next->status == CREATED) {
+            return next;
+        }
+
+        __list_append(&__scheduler->coop_list, next);
+    }
 }
 
 void __schedule() {
     if (__scheduler->current) {
-        if (__scheduler->current->status != WAITING_IO) {
-            // don't append the yielded coroutine in case it is 
-            // waiting for an IO to complete. the IO worker is responsible 
-            // to append it when completed.
+        if (__scheduler->current->status == RUNNING) {
             __scheduler->current->status = RUNNABLE;
-            __list_append(&__scheduler->coop_list, __scheduler->current);
         }
 
+        __list_append(&__scheduler->coop_list, __scheduler->current);
         __scheduler->current = NULL;
     }
 
-    // pick next coroutine to run
-    // should block if theres IO being queued/ processed and coop list is empty
     struct coroutine* selected = __pick_next_coop();
     if (!selected) {
         // all coroutines are done
@@ -146,6 +149,7 @@ void* __io_read_handler(struct io_rw_request* req) {
 
 void* __io_write_handler(struct io_rw_request* req) {
     ssize_t n = write(req->fd, req->buf, req->count);
+
     struct io_rw_response* res = (struct io_rw_response*)malloc(sizeof(struct io_rw_response));
     res->n = n;
 
@@ -176,7 +180,6 @@ void* __worker_loop(void* arg) {
 
         req->coop->io_response = res;
         req->coop->status = RUNNABLE;
-        __list_append(&__scheduler->coop_list, req->coop);
     }
 }
 
@@ -188,6 +191,7 @@ void __submit_io(enum io_type type, void* args) {
 
     __scheduler->current->status = WAITING_IO;
     __list_append(&__scheduler->io_queue, req);
+
     yield();
 
     free(req);
@@ -226,25 +230,23 @@ void coop_print(const char* str) {
 }
 
 void coop3(void *args) {
-    for (int i = 0; i < 6; i++) {
-        printf("hi from coop3 %d\n", i);
-        yield();
+    for (int i = 0; i < 2; i++) {
+        coop_print("hi3\n");
     }
 }
 
 void coop2(void *args) {
     coop(coop3, NULL);
-    for (int i = 0; i < 5; i++) {
-        printf("hi from coop2 %d\n", i);
-        yield();
+    for (int i = 0; i < 2; i++) {
+        coop_print("hi2\n");
     }
 }
 
 void coop1(void* args) {
     coop(coop2, NULL);
-    for (int i = 0; i < 4; i++) {
-        printf("hi from coop1 %d \n", i);
-        yield();
+
+    for (int i = 0; i < 2; i++) {
+        coop_print("hi1\n");
     }
 }
 
@@ -252,5 +254,4 @@ int main(int argc, char**argv) {
     // example usage
     yield();
     coop(coop1, NULL);
-    //coop(coop3, NULL);
 }
