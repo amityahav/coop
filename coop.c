@@ -370,21 +370,7 @@ int coop_close(int fd) {
 
 // ---- IO API ----
 
-void coop3(void *args) {
-    int fd = coop_open("example.txt", O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-
-    coop_print("coop3: reading from file\n");
-
-    char res[5];
-    coop_read(fd, res, 5);
-    coop_close(fd);
-
-    coop_print(res);
-}
-
 void coop2(void *args) {
-    coop(coop3, NULL);
-
     int fd = coop_open("example.txt", O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 
     coop_print("coop2: writing to file\n");
@@ -393,12 +379,22 @@ void coop2(void *args) {
     coop_write(fd, buf, 5);
 
     coop_close(fd);
+
+    fd = coop_open("example.txt", O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+
+    coop_print("coop2: reading from file\n");
+
+    char res[6];
+    coop_read(fd, res, 6);
+    coop_close(fd);
+
+    coop_print(res);
 }
 
 void coop1(void* args) {
     coop(coop2, NULL);
 
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 4; i++) {
         coop_print("coop1: Hey\n");
     }
 }
