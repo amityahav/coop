@@ -8,6 +8,7 @@ this is an educational project of course and not practical for production usage.
   - [x] write()
   - [x] read()
   - [x] open()
+  - [x] close()
 - Preemptive scheduling
 
 ### Example: 
