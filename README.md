@@ -12,37 +12,36 @@ this is an educational project of course and not practical for production usage.
 
 ### Example: 
 ```c
+void coop3(void *args) {
+    int fd = coop_open("example.txt", O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+
+    coop_print("coop3: reading from file\n");
+
+    char res[5];
+    coop_read(fd, res, 5);
+    coop_close(fd);
+
+    coop_print(res);
+}
+
 void coop2(void *args) {
+    coop(coop3, NULL);
+
     int fd = coop_open("example.txt", O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-    if (fd == -1) {
-        coop_print("failed opening file");
-        return;
-    }
 
     coop_print("coop2: writing to file\n");
 
     const char* buf = "Hello";
-    ssize_t n = coop_write(fd, buf, 6);
-    if (n < 6) {
-        coop_print("failed writing to file");
-    }
+    coop_write(fd, buf, 5);
 
-    coop_print("coop2: reading from file\n");
-
-    char res[6];
-    n = coop_read(fd, res, 6);
-    if (n < 6) {
-        printf("failed %zd", n);
-    }
-
-    coop_print(res);
+    coop_close(fd);
 }
 
 void coop1(void* args) {
     coop(coop2, NULL);
 
     for (int i = 0; i < 3; i++) {
-        coop_print("coop1: hello\n");
+        coop_print("coop1: Hey\n");
     }
 }
 
@@ -51,10 +50,10 @@ int main(int argc, char**argv) {
 }
 
 // Output:
-//   coop1: hello
-//   coop1: hello
-//   coop2: writing to file
-//   coop1: hello
-//   coop2: reading from file
-//   Hello
+//  coop1: Hey
+//  coop1: Hey
+//  coop2: writing to file
+//  coop3: reading from file
+//  coop1: Hey
+//  Hello
 ```

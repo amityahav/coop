@@ -166,6 +166,15 @@ void* __io_open_handler(struct io_open_request* req) {
     return res;
 }
 
+void* __io_close_handler(struct io_close_request* req) {
+    int r = close(req->fd);
+
+    struct io_close_response* res = (struct io_close_response*)malloc(sizeof(struct io_close_response));
+    res->r = r;
+
+    return res;
+}
+
 // ---- IO Handers ----
 
 void* __worker_loop(void* arg) {
@@ -183,6 +192,9 @@ void* __worker_loop(void* arg) {
                 break;
             case IO_OPEN:
                 res = __io_open_handler((struct io_open_request*)req->args);
+                break;
+            case IO_CLOSE:
+                res = __io_close_handler((struct io_close_request*)req->args);
                 break;
             default:
                 printf("invalid IO type");
@@ -258,43 +270,53 @@ int coop_open(const char* path, int oflag, mode_t mode) {
     return fd;
 }
 
+int coop_close(int fd) {
+    struct io_close_request* req = (struct io_close_request*)malloc(sizeof(struct io_close_request));
+
+    req->fd = fd;
+
+    __submit_io(IO_CLOSE, req);
+
+    struct io_close_response* res = (struct io_close_response*)__scheduler->current->io_response;
+    int r = res->r;
+
+    free(req);
+    free(res);
+    __scheduler->current->io_response = NULL;
+
+    return r;
+}
+
 void coop3(void *args) {
-    for (int i = 0; i < 2; i++) {
-        coop_print("hi3\n");
-    }
+    int fd = coop_open("example.txt", O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+
+    coop_print("coop3: reading from file\n");
+
+    char res[5];
+    coop_read(fd, res, 5);
+    coop_close(fd);
+
+    coop_print(res);
 }
 
 void coop2(void *args) {
+    coop(coop3, NULL);
+
     int fd = coop_open("example.txt", O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-    if (fd == -1) {
-        coop_print("failed opening file");
-        return;
-    }
 
     coop_print("coop2: writing to file\n");
 
     const char* buf = "Hello";
-    ssize_t n = coop_write(fd, buf, 6);
-    if (n < 6) {
-        coop_print("failed writing to file");
-    }
+    coop_write(fd, buf, 5);
 
-    coop_print("coop2: reading from file\n");
-
-    char res[6];
-    n = coop_read(fd, res, 6);
-    if (n < 6) {
-        printf("failed %zd", n);
-    }
-
-    coop_print(res);
+    coop_close(fd);
 }
 
 void coop1(void* args) {
     coop(coop2, NULL);
 
     for (int i = 0; i < 3; i++) {
-        coop_print("coop1: hello\n");
+        coop_print("coop1: Hey\n");
     }
 }
 

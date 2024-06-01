@@ -30,6 +30,7 @@ void coop(void (*func)(void*), void* args);
 ssize_t coop_read(int fd, void *buf, size_t count);
 ssize_t coop_write(int fd, void *buf, size_t count);
 int coop_open(const char* path, int oflag, mode_t mode);
+int coop_close(int fd);
 void coop_print(const char* str);
 void yield();
 
@@ -46,6 +47,7 @@ enum io_type {
     IO_READ,
     IO_WRITE,
     IO_OPEN,
+    IO_CLOSE,
 };
 
 struct io_rw_request {
@@ -66,6 +68,14 @@ struct io_open_request {
 
 struct io_open_response {
     int fd;
+};
+
+struct io_close_request {
+    int fd;
+};
+
+struct io_close_response {
+    int r;
 };
 
 struct io_request {
