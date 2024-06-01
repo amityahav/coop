@@ -4,12 +4,85 @@
 #include <string.h>
 #include "coop.h"
 
+// --- utils ----
+
+void* __list_pop(struct list* l) {
+    struct node* curr = l->head;
+    if (!curr) {
+        // list is empty
+        return NULL;
+    }
+
+    if (l->head == l->tail) {
+        // list is empty after the pop
+        l->head = l->tail = NULL;
+    } else {
+        l->head = l->head->next;
+    }
+
+    curr->next = NULL;
+    void* data = curr->data;
+    free(curr);
+
+    return data;
+}
+
+void __list_append(struct list* l, void* data) {
+    struct node* new_node = (struct node*)malloc(sizeof(struct node));
+    new_node->data = data;
+
+    if (!l->tail) {
+        // list is empty
+        l->head = l->tail = new_node;
+    } else {
+        l->tail->next = new_node;
+        l->tail = new_node;
+    }
+}
+
+void __init_blocking_queue(struct blocking_queue* bq) {
+    pthread_mutex_init(&bq->mu, NULL);
+    pthread_cond_init(&bq->empty, NULL);
+}
+
+void __enqueue(struct blocking_queue* bq, void* data) {
+    pthread_mutex_lock(&bq->mu);
+
+    __list_append(&bq->l, data);
+    pthread_cond_signal(&bq->empty);
+
+    pthread_mutex_unlock(&bq->mu);
+}
+
+void* __dequeue(struct blocking_queue* bq) {
+    pthread_mutex_lock(&bq->mu);
+
+    if (!bq->l.head) {
+        pthread_cond_wait(&bq->empty, &bq->mu);
+    }
+
+   void* res =  __list_pop(&bq->l);
+
+    pthread_mutex_unlock(&bq->mu);
+
+    return res;
+}
+
+// ---- utils ----
+
 struct scheduler* __scheduler;
 
 void* __worker_loop(void* arg);
 
 void __init_scheduler() {
     __scheduler = (struct scheduler*)malloc(sizeof(struct scheduler));
+}
+
+void __init_io_worker() {
+    if (!__scheduler) {
+        return;
+    }
+
     __init_blocking_queue(&__scheduler->io_queue);
     pthread_create(&__scheduler->worker_thread, NULL, __worker_loop, NULL);
 }
@@ -207,6 +280,12 @@ void* __worker_loop(void* arg) {
 }
 
 void __submit_io(enum io_type type, void* args) {
+    static char once = 0;
+    if (!once) {
+        once = 1;
+        __init_io_worker();
+    }
+
     struct io_request* req = (struct io_request*)malloc(sizeof(struct io_request));
     req->type = type;
     req->coop = __scheduler->current;
@@ -238,6 +317,8 @@ ssize_t __coop_rw(enum io_type type, int fd, void *buf, size_t count) {
 
     return n;    
 }
+
+// ---- IO API ----
 
 ssize_t coop_read(int fd, void *buf, size_t count) {
     return __coop_rw(IO_READ, fd, buf, count);
@@ -286,6 +367,8 @@ int coop_close(int fd) {
 
     return r;
 }
+
+// ---- IO API ----
 
 void coop3(void *args) {
     int fd = coop_open("example.txt", O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);

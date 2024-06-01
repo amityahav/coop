@@ -1,7 +1,7 @@
 #include <setjmp.h>
 #include "sys/types.h"
 #include <fcntl.h>
-#include "list.h"
+#include "pthread.h"
 
 #define STACK_SIZE 2 * 1024
 #define INIT 0
@@ -34,8 +34,25 @@ int coop_close(int fd);
 void coop_print(const char* str);
 void yield();
 
+struct node {
+    void* data;
+    struct node* next;
+};
+
+struct list {
+    struct node* head;
+    struct node* tail;
+};
+
+struct blocking_queue {
+    struct list l;
+    pthread_mutex_t mu;
+    pthread_cond_t empty;
+};
+
 struct scheduler {
     jmp_buf context;
+    
     struct coroutine* current;
     struct list coop_list;
 
