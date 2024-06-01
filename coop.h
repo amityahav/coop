@@ -1,5 +1,6 @@
 #include <setjmp.h>
 #include "sys/types.h"
+#include <fcntl.h>
 #include "list.h"
 
 #define STACK_SIZE 2 * 1024
@@ -28,6 +29,7 @@ struct coroutine {
 void coop(void (*func)(void*), void* args);
 ssize_t coop_read(int fd, void *buf, size_t count);
 ssize_t coop_write(int fd, void *buf, size_t count);
+int coop_open(const char* path, int oflag, mode_t mode);
 void coop_print(const char* str);
 void yield();
 
@@ -37,12 +39,13 @@ struct scheduler {
     struct list coop_list;
 
     pthread_t worker_thread;
-    struct list io_queue;
+    struct blocking_queue io_queue;
 };
 
 enum io_type {
     IO_READ,
     IO_WRITE,
+    IO_OPEN,
 };
 
 struct io_rw_request {
@@ -53,6 +56,16 @@ struct io_rw_request {
 
 struct io_rw_response {
     ssize_t n;
+};
+
+struct io_open_request {
+    const char* path;
+    int oflag;
+    mode_t mode;
+};
+
+struct io_open_response {
+    int fd;
 };
 
 struct io_request {

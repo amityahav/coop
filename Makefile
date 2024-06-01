@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-Wall -Wextra -g
+CFLAGS=-Wall -g
 TARGET=coop
 
 SRC_FILES=$(wildcard *.c)

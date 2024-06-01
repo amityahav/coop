@@ -35,3 +35,31 @@ void __list_append(struct list* l, void* data) {
         l->tail = new_node;
     }
 }
+
+void __init_blocking_queue(struct blocking_queue* bq) {
+    pthread_mutex_init(&bq->mu, NULL);
+    pthread_cond_init(&bq->empty, NULL);
+}
+
+void __enqueue(struct blocking_queue* bq, void* data) {
+    pthread_mutex_lock(&bq->mu);
+
+    __list_append(&bq->l, data);
+    pthread_cond_signal(&bq->empty);
+
+    pthread_mutex_unlock(&bq->mu);
+}
+
+void* __dequeue(struct blocking_queue* bq) {
+    pthread_mutex_lock(&bq->mu);
+
+    if (!bq->l.head) {
+        pthread_cond_wait(&bq->empty, &bq->mu);
+    }
+
+   void* res =  __list_pop(&bq->l);
+
+    pthread_mutex_unlock(&bq->mu);
+
+    return res;
+}
